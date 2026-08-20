@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "cavecrew": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/cavecrew/SKILL.md",
+      "computedHash": "7bccdb8d49f41bcb480481cd4f8381b054f69847bed67fb003d83249dd6f0030"
+    },
+    "caveman": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "48646eeec87b27067502d8bd450484faf08af588df783706b1571ee72f2d918c"
+    },
+    "caveman-stats": {
+      "source": "JuliusBrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman-stats/SKILL.md",
+      "computedHash": "57c7db449641379e2afd1389fdb17cec8f33d9c8e25b1d28093937b4431895e8"
+    }
+  }
+}
