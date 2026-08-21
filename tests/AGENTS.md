@@ -19,6 +19,18 @@ Working cross-module behavior suite: twenty-eight pytest tests cover ontology, E
 
 ## Decision Log
 
+### 2026-08-21 — Product-UX rework assertions (CRU-22 follow-up)
+- **Change**: `App.test.jsx` primary test now asserts product framing — "Run assessment" button, GETTING STARTED panel, outcome strip ("Attacks caught", "Approved fraud"), disclosure summaries ("Traffic realism checks", "Why this decision"), plain feature labels ("Account history length"), "Never seen in training" rows, "Assessment history" ledger — instead of the removed evaluator-marketing copy.
+- **Reasoning**: Tests lock the user-facing contract the user specified: no implementation-claims panel, progressive disclosure present, workflow language throughout.
+- **Rejected alternative(s)**: Asserting details open-state — jsdom rendering already exposes collapsed `<details>` content; interaction testing adds flake without protecting the contract.
+- **Task/session**: Product-UX rework after CRU-22 feedback.
+
+### 2026-08-21 — Judge-UX regressions (CRU-22)
+- **Change**: `test_api.py` asserts per-event `top_shap` (1–3 signed contributions) on evidence catches/misses and monotonic non-negative `elapsed_ms` on streamed stage events. `frontend/src/App.test.jsx` grows to four tests: streamed evidence incl. ledger/onboarding/SHAP chips/elapsed, two-run ledger with Δ and revisit, 409 friendly error, ontology rail/mode filters.
+- **Reasoning**: Every new judge-facing surface needs an HTTP- or DOM-level lock; the revisit test proves history switching renders a different stored artifact, and the filter test guards against silently showing all rows.
+- **Rejected alternative(s)**: Snapshot tests — over-lock styling. Mocking fetch for ledger tests only — the suite already streams real SSE packet shapes.
+- **Task/session**: Judge-interaction UX pass.
+
 ### 2026-08-21 — Cycle protection regressions (CRU-21)
 - **Change**: `test_api.py` adds three tests: a real in-flight Cycle rejects a second `POST /api/cycle` and `POST /api/cycle/stream` with 409 (polling `cycle_guard.in_flight` for determinism, separate TestClients for thread safety), a `CycleGuard(max_starts=1)` swap proves 429 after one start, and a patched exploding `run_closed_loop` proves the lock releases after failure and the next Cycle succeeds (`raise_server_exceptions=False` to observe the 500).
 - **Reasoning**: Protection must be proven at the HTTP boundary against direct API calls, not the browser; the release paths (success, failure) both need locks observed free afterwards.

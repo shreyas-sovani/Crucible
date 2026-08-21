@@ -112,6 +112,40 @@ dd { color: #14273a; font: 500 1.28rem/1.2 "Iowan Old Style", Georgia, serif; ma
 .decision-decline { color: #1c5f6b; font-weight: 700; }
 .decision-approve { color: #b34a2d; font-weight: 700; }
 
+.stage-elapsed { color: #2c8290; font-family: "SFMono-Regular", Consolas, monospace; font-size: .68rem; }
+.outcome-strip { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); margin: 1.4rem 0 .6rem; }
+.outcome-cell { background: rgb(20 39 58 / 5%); border-left: 3px solid #2c8290; padding: .85rem 1rem; }
+.outcome-cell dt { color: #5b7485; font: 700 .6rem "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.outcome-cell dd { color: #14273a; font: 500 1.9rem/1.1 "Iowan Old Style", Georgia, serif; margin: .3rem 0 .25rem; }
+.outcome-cell p { color: #496577; font-size: .74rem; line-height: 1.4; margin: 0; }
+.outcome-decisions { margin-top: 0; }
+.tech-detail { border-top: 1px dashed #b8cbd0; margin-top: 1.1rem; padding-top: .7rem; }
+.tech-detail summary { color: #2c8290; cursor: pointer; font: 700 .68rem "SFMono-Regular", Consolas, monospace; letter-spacing: .04em; }
+.tech-detail[open] summary { margin-bottom: .6rem; }
+.why-details summary { color: #2c8290; cursor: pointer; font: 600 .72rem "SFMono-Regular", Consolas, monospace; }
+.why-details[open] summary { margin-bottom: .45rem; }
+.why-details .stage-note { margin-top: .5rem; }
+.why-label { color: #36576c; }
+.first-run { background: rgb(20 39 58 / 4%); border: 1px solid #b8cbd0; margin-top: 1.6rem; padding: 1.4rem 1.5rem; }
+.first-run h2 { color: #14273a; font: 500 1.45rem/1.25 "Iowan Old Style", Georgia, serif; margin: .4rem 0 .9rem; }
+.first-run-steps { display: grid; gap: .7rem; margin: 0; padding-left: 1.2rem; }
+.first-run-steps li::marker { color: #d05c39; font-family: "SFMono-Regular", Consolas, monospace; font-weight: 700; }
+.run-ledger { margin-top: 1.8rem; }
+.run-ledger .ledger-head { align-items: end; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: .9rem; }
+.run-select { background: #dce9e9; border: 0; color: #36576c; cursor: pointer; font: 700 .75rem "SFMono-Regular", Consolas, monospace; padding: .3rem .55rem; }
+.run-viewed { background: rgb(44 130 144 / 10%); }
+.delta-pos { color: #1c5f6b; font-weight: 700; }
+.delta-neg { color: #b34a2d; font-weight: 700; }
+.filter-chips { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .9rem; }
+.chip { background: transparent; border: 1px solid #6f95a3; color: #496577; cursor: pointer; font: .65rem "SFMono-Regular", Consolas, monospace; padding: .32rem .55rem; text-transform: capitalize; }
+.chip-active { background: #14273a; border-color: #14273a; color: #f4f4ef; }
+.filter-count { color: #5b7485; font: .65rem "SFMono-Regular", Consolas, monospace; margin-left: .3rem; }
+.why-cell { display: flex; flex-wrap: wrap; gap: .3rem; }
+.shap-chip { align-items: center; border-radius: .2rem; display: inline-flex; font: .62rem "SFMono-Regular", Consolas, monospace; gap: .3rem; padding: .2rem .35rem; }
+.shap-chip code { font-size: .62rem; }
+.shap-pos { background: rgb(44 130 144 / 14%); color: #1c5f6b; }
+.shap-neg { background: rgb(179 74 45 / 12%); color: #8a3722; }
+
 @media (max-width: 720px) {
   .lab-shell { padding: 1.5rem 1rem 3rem; }
   .masthead-line, .cycle-panel { grid-template-columns: 1fr; gap: 1.5rem; }

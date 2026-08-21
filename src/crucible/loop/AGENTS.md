@@ -19,6 +19,12 @@ Working complete Cycle. `run_closed_loop()` produces generation, detection, muta
 
 ## Decision Log
 
+### 2026-08-21 — Per-event TreeSHAP on evidence samples (CRU-22)
+- **Change**: `_evidence_report` now takes the model, feature names, and frozen Test matrix; selected catch/miss rows get `top_shap` (top-3 signed contributions, strongest first) computed from one batched `shap_values` call on ≤10 rows. Row lookup maps frame index labels to matrix positions via ordinal enumeration because Test-slice labels are global Event positions.
+- **Reasoning**: "Why did the detector decide this?" is the natural judge question; per-row native TreeSHAP already existed at this seam. Batched-subset computation avoids a second full-matrix SHAP pass at spec scale.
+- **Rejected alternative(s)**: Attributions from the global mean-|SHAP| list — row-agnostic, explains nothing. Recomputing SHAP per row in a loop — N predict calls for no benefit.
+- **Task/session**: Judge-interaction UX pass.
+
 ### 2026-08-20 — Fidelity gates, family efficacy, delayed-label counts, evidence samples (CRU-14/15/18)
 - **Change**: `GenerationReport` gained `dining_ks_pvalue`, `p2p_ks_pvalue`, `ist_business_hour_share`, `ist_business_hours_pass`, `fidelity_gate_count`, `fidelity_pass`; KS gates compare against the zero-truncated normal CDF with a 50-sample minimum. `DetectionReport` gained `delayed_card_fraud_count/share` and `family_efficacy` rows (recall at the validation-selected operating point). New `EvidenceReport`/`EvidenceEvent` serialize concrete frozen-Test fraud Events with masked tokens, GenAI signal, score, and decision.
 - **Reasoning**: CONTEXT defines the p > 0.05 fidelity threshold as a verdict, not just reported p-values; PRD 2.3 requires zero-day efficacy per held-out family, which an aggregate PR-AUC hides; the 45-day chargeback lag and concrete attack samples are judge-visible proof the loop is real. Small-sample KS p-values are uniform draws, so gates under 50 samples report `None` instead of flaking `fidelity_pass`.

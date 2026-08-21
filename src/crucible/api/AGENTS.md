@@ -19,6 +19,12 @@ Working. `GET /api/ontology` returns Vector objects; `POST /api/cycle` remains t
 
 ## Decision Log
 
+### 2026-08-21 — Stage timings and per-event attributions over HTTP (CRU-22)
+- **Change**: `_cycle_stream` stamps each SSE stage payload with backend-measured `elapsed_ms` from cycle start; `EvidenceEventSummary` gains `top_shap: list[ShapContribution]` (top-3 signed TreeSHAP per catch/miss).
+- **Reasoning**: Judges could not tell whether a long spec-scale run was working or hung, and could not ask "why was this event flagged?" — both answers already existed server-side (monotonic stage boundaries, per-row TreeSHAP) and only needed to cross the HTTP boundary additively.
+- **Rejected alternative(s)**: Client-side stopwatches — measure browser receive time, not backend work. Reusing the global top-10 SHAP list per event — attributes nothing specific to the row.
+- **Task/session**: Judge-interaction UX pass.
+
 ### 2026-08-21 — Server-side single-flight + rate limit for the Cycle (CRU-21)
 - **Change**: Added stdlib-only `CycleGuard` (threading.Lock + deque of monotonic start timestamps). `POST /api/cycle` wraps `run_closed_loop` in `begin()`/`finally end()`; `POST /api/cycle/stream` calls `begin()` in the endpoint (so rejection is a real HTTP 409/429 before SSE starts) and releases in the worker thread's `finally`, which also runs when a client disconnects mid-stream because the offline compute finishes regardless.
 - **Reasoning**: The Cycle is expensive server-side work on a public judge URL; repeated or concurrent direct API calls could starve the box. The Lab deploys a single Uvicorn process, so an in-process guard is correct; no dependency added.

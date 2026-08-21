@@ -103,6 +103,7 @@ class EvidenceEvent:
     genai_signal: str | None
     score: float
     decision: str
+    top_shap: list[tuple[str, float]]
 
 
 @dataclass(frozen=True)
@@ -161,7 +162,7 @@ def run_closed_loop(
         generation=generation,
         detection=detection,
         mutation=mutation,
-        evidence=_evidence_report(scored_test),
+        evidence=_evidence_report(scored_test, model=model, feature_names=features.names, test_matrix=test_matrix),
     )
 
 
@@ -391,22 +392,46 @@ def _family_efficacy(scored_test: pd.DataFrame, operating_point: float) -> list[
     return efficacy
 
 
-def _evidence_report(scored_test: pd.DataFrame, *, limit: int = 5) -> EvidenceReport:
+def _evidence_report(
+    scored_test: pd.DataFrame,
+    *,
+    model: LightGBMModel,
+    feature_names: tuple[str, ...],
+    test_matrix: np.ndarray,
+    limit: int = 5,
+) -> EvidenceReport:
     """Concrete token-only fraud samples judges can inspect per run."""
 
-    fraud = scored_test.loc[scored_test["label"].eq(1)].copy()
-    if fraud.empty:
+    fraud_mask = scored_test["label"].eq(1).to_numpy()
+    if not fraud_mask.any():
         return EvidenceReport(top_catches=[], approved_misses=[])
+    fraud = scored_test.loc[fraud_mask].copy()
     catches = fraud.sort_values("score", ascending=False).head(limit)
     misses = fraud.loc[fraud["decision"].eq(Decision.APPROVE.value)]
     misses = misses.sort_values(["score", "amount_usd", "amount_inr"], ascending=False).head(limit)
+
+    # Test-slice index labels are global Event positions; matrix rows follow frame order.
+    position_of = {label: position for position, label in enumerate(scored_test.index)}
+    selected_labels = list(pd.concat([catches, misses]).index)
+    selected_positions = np.asarray([position_of[label] for label in selected_labels], dtype=int)
+    contributions = np.asarray(model.shap_values(test_matrix[selected_positions]), dtype=float)
+    attribution = {
+        int(label): _top_shap(contributions[offset], feature_names) for offset, label in enumerate(selected_labels)
+    }
     return EvidenceReport(
-        top_catches=[_evidence_event(row) for _, row in catches.iterrows()],
-        approved_misses=[_evidence_event(row) for _, row in misses.iterrows()],
+        top_catches=[_evidence_event(row, attribution[int(row.name)]) for _, row in catches.iterrows()],
+        approved_misses=[_evidence_event(row, attribution[int(row.name)]) for _, row in misses.iterrows()],
     )
 
 
-def _evidence_event(row: pd.Series) -> EvidenceEvent:
+def _top_shap(contributions: np.ndarray, feature_names: tuple[str, ...], *, count: int = 3) -> list[tuple[str, float]]:
+    """Signed per-row TreeSHAP attributions, strongest first."""
+
+    order = np.argsort(np.abs(contributions))[::-1][:count]
+    return [(feature_names[index], round(float(contributions[index]), 6)) for index in order]
+
+
+def _evidence_event(row: pd.Series, top_shap: list[tuple[str, float]]) -> EvidenceEvent:
     usd = pd.to_numeric(pd.Series([row.get("amount_usd")]), errors="coerce").iloc[0]
     inr = pd.to_numeric(pd.Series([row.get("amount_inr")]), errors="coerce").iloc[0]
     amount = float(usd) if pd.notna(usd) else float(inr) / 84.0 if pd.notna(inr) else 0.0
@@ -423,6 +448,7 @@ def _evidence_event(row: pd.Series) -> EvidenceEvent:
         genai_signal=_genai_signal(row),
         score=float(row.get("score") or 0.0),
         decision=str(row.get("decision")),
+        top_shap=top_shap,
     )
 
 

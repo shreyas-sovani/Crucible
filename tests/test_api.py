@@ -55,9 +55,12 @@ def test_lab_http_surface_exposes_ontology_and_real_closed_cycle() -> None:
     assert catch["score"] >= detection["operating_point"]
     assert catch["family"] != "legitimate"
     assert catch["entity_token"]
+    assert 1 <= len(catch["top_shap"]) <= 3
+    assert all(item["feature"] and isinstance(item["contribution"], float) for item in catch["top_shap"])
     for miss in evidence["approved_misses"]:
         assert miss["decision"] == "APPROVE"
         assert miss["amount_usd"] >= 0
+        assert "top_shap" in miss
     assert lab.status_code == 200
     assert "Crucible Lab" in lab.text
 
@@ -76,6 +79,8 @@ def test_lab_http_surface_streams_real_cycle_stages_before_final_artifact() -> N
     assert response.headers["content-type"].startswith("text/event-stream")
     assert [event["stage"] for event in stage_events] == ["Identify", "Simulate", "Detect", "Mutate"]
     assert all(event["status"] for event in stage_events)
+    assert all(isinstance(event["elapsed_ms"], int) and event["elapsed_ms"] >= 0 for event in stage_events)
+    assert stage_events[-1]["elapsed_ms"] >= stage_events[0]["elapsed_ms"]
     assert result["generation"]["active_crew_count"] == 8
     assert result["detection"]["test_event_count"] > 0
 

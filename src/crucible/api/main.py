@@ -147,6 +147,11 @@ class MutationSummary(BaseModel):
     mutated_config: CrewConfig | None
 
 
+class ShapContribution(BaseModel):
+    feature: str
+    contribution: float
+
+
 class EvidenceEventSummary(BaseModel):
     event_id: str
     family: str
@@ -159,6 +164,7 @@ class EvidenceEventSummary(BaseModel):
     genai_signal: str | None
     score: float
     decision: str
+    top_shap: list[ShapContribution]
 
 
 class EvidenceSummary(BaseModel):
@@ -232,8 +238,24 @@ def _cycle_summary(run: CycleRun) -> CycleSummary:
         ),
         mutation=MutationSummary(**run.mutation.__dict__),
         evidence=EvidenceSummary(
-            top_catches=[EvidenceEventSummary(**event.__dict__) for event in run.evidence.top_catches],
-            approved_misses=[EvidenceEventSummary(**event.__dict__) for event in run.evidence.approved_misses],
+            top_catches=[
+                EvidenceEventSummary(
+                    **{
+                        **event.__dict__,
+                        "top_shap": [ShapContribution(feature=feature, contribution=value) for feature, value in event.top_shap],
+                    }
+                )
+                for event in run.evidence.top_catches
+            ],
+            approved_misses=[
+                EvidenceEventSummary(
+                    **{
+                        **event.__dict__,
+                        "top_shap": [ShapContribution(feature=feature, contribution=value) for feature, value in event.top_shap],
+                    }
+                )
+                for event in run.evidence.approved_misses
+            ],
         ),
     )
 
@@ -242,19 +264,29 @@ def _cycle_stream(request: CycleRequest, *, on_finish: Callable[[], None]) -> It
     messages: Queue[tuple[str, dict[str, object] | None]] = Queue()
 
     def execute_cycle() -> None:
+        started_at = time.monotonic()
+
+        def stage_message(stage: str, status: str) -> None:
+            messages.put(
+                (
+                    "stage",
+                    {"stage": stage, "status": status, "elapsed_ms": int((time.monotonic() - started_at) * 1000)},
+                )
+            )
+
         try:
             run = run_closed_loop(
                 seed=request.seed,
                 n_days=request.n_days,
                 num_users=request.num_users,
                 crews=request.crews,
-                on_stage=lambda stage, status: messages.put(("stage", {"stage": stage, "status": status})),
+                on_stage=stage_message,
             )
             messages.put(("result", _cycle_summary(run).model_dump(mode="json")))
         except Exception as error:  # pragma: no cover - browser-facing failure path
             messages.put(("error", {"detail": str(error)}))
         finally:
-            on_finish()  # type: ignore[operator]
+            on_finish()
             messages.put(("end", None))
 
     Thread(target=execute_cycle, daemon=True).start()

@@ -25,6 +25,7 @@ This queue was restored on 2026-08-20. The prior file duplicated `PRD.md`; these
 | CRU-19 | Lab cycle controls (seed, world-scale presets through spec scale) and efficacy/fidelity/evidence UI (depends on CRU-12, CRU-14, CRU-15, CRU-18) | done | `frontend/src/App.test.jsx` |
 | CRU-20 | Spec-scale realism: exact 80% IST business-hour volume, truncated-normal amounts, world-scaled fraud rate, wave-rotated crew entities, imbalance-aware LightGBM, capped `prior_tx_count` (depends on CRU-03, CRU-04, CRU-05, CRU-17) | done | `tests/test_background.py`, `test_simulation.py`, `test_features.py` |
 | CRU-21 | Server-side Cycle protection: single-flight (409) and sliding-window rate limit (429) on both Cycle endpoints, stdlib-only, lock released on success/failure/disconnect (depends on CRU-08, CRU-12) | done | `tests/test_api.py` |
+| CRU-22 | Judge-interaction UX: per-event TreeSHAP evidence, backend stage elapsed in SSE, run-history ledger with cross-run compare, first-run guide, guard-aware errors, ontology filters; reworked to analyst-first product framing with progressive disclosure after review (depends on CRU-12, CRU-19, CRU-21) | done | `tests/test_api.py`, `frontend/src/App.test.jsx` |
 
 ## Execution Rule
 
