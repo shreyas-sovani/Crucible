@@ -15,9 +15,15 @@ Regression safety. A missing or weak test can allow catalog, Event Envelope, ant
 - External systems touched: none.
 
 ## Current State
-Working cross-module behavior suite: twenty-five pytest tests cover ontology, Event boundary, deterministic background (per-user entities, truncated-normal amounts, 80% IST business hours), topology, eight behavioural crews, chargeback availability, world-scaled fraud volume with unique ids, Train-window resimulation, causal features (vectorized windows exactly matching a loop reference), LightGBM policy/1% FPR metrics, zero-day and delayed-label evaluation, missed-row-only mutation, and both completed and streamed real Cycle HTTP surfaces including fidelity gates, per-family efficacy, and evidence samples.
+Working cross-module behavior suite: twenty-eight pytest tests cover ontology, Event boundary, deterministic background (per-user entities, truncated-normal amounts, 80% IST business hours), topology, eight behavioural crews, chargeback availability, world-scaled fraud volume with unique ids, Train-window resimulation, causal features (vectorized windows exactly matching a loop reference), LightGBM policy/1% FPR metrics, zero-day and delayed-label evaluation, missed-row-only mutation, and both completed and streamed real Cycle HTTP surfaces including fidelity gates, per-family efficacy, evidence samples, and server-side Cycle protection (409 on concurrent trigger, 429 on rate breach, lock release after success/failure).
 
 ## Decision Log
+
+### 2026-08-21 — Cycle protection regressions (CRU-21)
+- **Change**: `test_api.py` adds three tests: a real in-flight Cycle rejects a second `POST /api/cycle` and `POST /api/cycle/stream` with 409 (polling `cycle_guard.in_flight` for determinism, separate TestClients for thread safety), a `CycleGuard(max_starts=1)` swap proves 429 after one start, and a patched exploding `run_closed_loop` proves the lock releases after failure and the next Cycle succeeds (`raise_server_exceptions=False` to observe the 500).
+- **Reasoning**: Protection must be proven at the HTTP boundary against direct API calls, not the browser; the release paths (success, failure) both need locks observed free afterwards.
+- **Rejected alternative(s)**: Sleeping-based race tests — flaky. Mocking the guard instead of the orchestrator — would not prove endpoints wire protection to real Cycle execution.
+- **Task/session**: Protect expensive Cycle operation on deployed Oracle VM.
 
 ### 2026-08-20 — Spec-scale and judge-evidence regressions (CRU-14–20)
 - **Change**: `test_background.py` asserts per-user entity reuse and 0.80 ± 0.05 IST share; `test_simulation.py` asserts fraud volume scaling with unique `event_id`s; `test_features.py` keeps a full loop reference for the four windows plus capped `prior_tx_count`; `test_api.py` asserts `fidelity_pass`, gate count, IST band, delayed share ∈ [0.25, 0.35], per-family zero-day rows, and evidence catch/miss contracts.

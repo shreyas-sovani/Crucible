@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
+from collections import deque
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from queue import Queue
 from threading import Thread
-from collections.abc import Iterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,6 +22,52 @@ from crucible.loop.orchestrator import CycleRun, run_closed_loop
 
 
 app = FastAPI(title="Crucible Lab", version="0.1.0")
+
+CYCLE_MAX_STARTS_PER_WINDOW = 8
+CYCLE_RATE_WINDOW_SECONDS = 60.0
+
+
+class CycleGuard:
+    """Server-side single-flight and rate limit for the expensive offline Cycle.
+
+    Process-local by design: the Lab deploys one Uvicorn process. If the server
+    is ever scaled to multiple workers, this state must move to a shared store.
+    """
+
+    def __init__(self, *, max_starts: int, window_seconds: float) -> None:
+        self._lock = threading.Lock()
+        self._starts: deque[float] = deque()
+        self._max_starts = max_starts
+        self._window_seconds = window_seconds
+        self._in_flight = False
+
+    @property
+    def in_flight(self) -> bool:
+        return self._in_flight
+
+    def begin(self) -> None:
+        """Reserve one Cycle start or raise 429 (rate) / 409 (already running)."""
+
+        now = time.monotonic()
+        with self._lock:
+            while self._starts and now - self._starts[0] >= self._window_seconds:
+                self._starts.popleft()
+            if len(self._starts) >= self._max_starts:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Cycle rate limit reached ({self._max_starts} per {int(self._window_seconds)}s). Try again shortly.",
+                )
+            if self._in_flight:
+                raise HTTPException(status_code=409, detail="A full offline Cycle is already running. Wait for it to finish.")
+            self._starts.append(now)
+            self._in_flight = True
+
+    def end(self) -> None:
+        with self._lock:
+            self._in_flight = False
+
+
+cycle_guard = CycleGuard(max_starts=CYCLE_MAX_STARTS_PER_WINDOW, window_seconds=CYCLE_RATE_WINDOW_SECONDS)
 
 
 class CycleRequest(BaseModel):
@@ -135,12 +184,16 @@ def get_ontology() -> list[Vector]:
 def run_cycle(request: CycleRequest) -> CycleSummary:
     """Execute real seeded generation, detection, and mutation against frozen Test."""
 
-    run = run_closed_loop(
-        seed=request.seed,
-        n_days=request.n_days,
-        num_users=request.num_users,
-        crews=request.crews,
-    )
+    cycle_guard.begin()
+    try:
+        run = run_closed_loop(
+            seed=request.seed,
+            n_days=request.n_days,
+            num_users=request.num_users,
+            crews=request.crews,
+        )
+    finally:
+        cycle_guard.end()
     return _cycle_summary(run)
 
 
@@ -148,11 +201,18 @@ def run_cycle(request: CycleRequest) -> CycleSummary:
 def stream_cycle(request: CycleRequest) -> StreamingResponse:
     """Stream actual Cycle stage boundaries, then the unchanged final Cycle artifact."""
 
-    return StreamingResponse(
-        _cycle_stream(request),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    cycle_guard.begin()
+    try:
+        return StreamingResponse(
+            _cycle_stream(request, on_finish=cycle_guard.end),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+    except BaseException:
+        # StreamingResponse construction itself does not run the generator;
+        # if FastAPI fails before the response starts, nobody else will end().
+        cycle_guard.end()
+        raise
 
 
 def _cycle_summary(run: CycleRun) -> CycleSummary:
@@ -178,7 +238,7 @@ def _cycle_summary(run: CycleRun) -> CycleSummary:
     )
 
 
-def _cycle_stream(request: CycleRequest) -> Iterator[str]:
+def _cycle_stream(request: CycleRequest, *, on_finish: Callable[[], None]) -> Iterator[str]:
     messages: Queue[tuple[str, dict[str, object] | None]] = Queue()
 
     def execute_cycle() -> None:
@@ -194,6 +254,7 @@ def _cycle_stream(request: CycleRequest) -> Iterator[str]:
         except Exception as error:  # pragma: no cover - browser-facing failure path
             messages.put(("error", {"detail": str(error)}))
         finally:
+            on_finish()  # type: ignore[operator]
             messages.put(("end", None))
 
     Thread(target=execute_cycle, daemon=True).start()

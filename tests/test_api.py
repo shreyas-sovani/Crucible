@@ -1,8 +1,11 @@
 import json
+import threading
+import time
 
 from fastapi.testclient import TestClient
 
-from crucible.api.main import app
+import crucible.api.main as api_main
+from crucible.api.main import CycleGuard, app
 
 
 def test_lab_http_surface_exposes_ontology_and_real_closed_cycle() -> None:
@@ -85,3 +88,61 @@ def _sse_events(payload: str) -> list[tuple[str, dict[str, object]]]:
         data = next(line.removeprefix("data: ") for line in lines if line.startswith("data: "))
         events.append((event, json.loads(data)))
     return events
+
+
+_TINY_CYCLE = {"seed": 3, "n_days": 1, "num_users": 5}
+
+
+def test_second_concurrent_cycle_is_rejected_and_lock_released_after_success() -> None:
+    first_client = TestClient(app)
+    busy_client = TestClient(app)
+    outcomes: dict[str, object] = {}
+
+    def run_first_cycle() -> None:
+        outcomes["first"] = first_client.post("/api/cycle", json=_TINY_CYCLE)
+
+    worker = threading.Thread(target=run_first_cycle)
+    worker.start()
+    deadline = time.monotonic() + 10.0
+    while not api_main.cycle_guard.in_flight and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert api_main.cycle_guard.in_flight
+
+    busy_json = busy_client.post("/api/cycle", json=_TINY_CYCLE)
+    busy_stream = busy_client.post("/api/cycle/stream", json=_TINY_CYCLE)
+
+    assert busy_json.status_code == 409
+    assert busy_json.json()["detail"]
+    assert busy_stream.status_code == 409
+
+    worker.join(timeout=60.0)
+    assert outcomes["first"].status_code == 200
+    assert not api_main.cycle_guard.in_flight
+
+
+def test_cycle_rate_limit_is_enforced_server_side(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "cycle_guard", CycleGuard(max_starts=1, window_seconds=60.0))
+    client = TestClient(app)
+
+    first = client.post("/api/cycle", json=_TINY_CYCLE)
+    second = client.post("/api/cycle", json=_TINY_CYCLE)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["detail"]
+
+
+def test_cycle_lock_is_released_after_failure(monkeypatch) -> None:
+    def explode(**_kwargs: object) -> None:
+        raise RuntimeError("cycle exploded")
+
+    monkeypatch.setattr(api_main, "run_closed_loop", explode)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    failed = client.post("/api/cycle", json=_TINY_CYCLE)
+    assert failed.status_code == 500
+    assert not api_main.cycle_guard.in_flight
+
+    monkeypatch.undo()
+    recovered = client.post("/api/cycle", json=_TINY_CYCLE)
+    assert recovered.status_code == 200

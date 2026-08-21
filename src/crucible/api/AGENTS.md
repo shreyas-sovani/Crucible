@@ -15,9 +15,15 @@ UI/backend contract. Wrong paths, request validation, or mount order breaks visu
 - External systems touched: none.
 
 ## Current State
-Working. `GET /api/ontology` returns Vector objects; `POST /api/cycle` remains the completed Cycle contract. Additive `POST /api/cycle/stream` emits four actual stage events, then the exact same Cycle artifact as a final SSE event. `CycleSummary` now also carries fidelity-gate verdicts, IST business-hour share, delayed card-label counts, per-family `FamilyEfficacySummary` rows, and an `EvidenceSummary` of token-only frozen-Test catches/misses. Static mount is conditional so backend tests work before UI build.
+Working. `GET /api/ontology` returns Vector objects; `POST /api/cycle` remains the completed Cycle contract. Additive `POST /api/cycle/stream` emits four actual stage events, then the exact same Cycle artifact as a final SSE event. Both Cycle endpoints are protected server-side by `cycle_guard` (`CycleGuard`: sliding-window rate limit `CYCLE_MAX_STARTS_PER_WINDOW=8` per `CYCLE_RATE_WINDOW_SECONDS=60` plus single-flight — concurrent trigger → 409, rate breach → 429, FastAPI `{"detail": ...}` convention). `CycleSummary` carries fidelity-gate verdicts, IST business-hour share, delayed card-label counts, per-family `FamilyEfficacySummary` rows, and an `EvidenceSummary` of token-only frozen-Test catches/misses. Static mount is conditional so backend tests work before UI build.
 
 ## Decision Log
+
+### 2026-08-21 — Server-side single-flight + rate limit for the Cycle (CRU-21)
+- **Change**: Added stdlib-only `CycleGuard` (threading.Lock + deque of monotonic start timestamps). `POST /api/cycle` wraps `run_closed_loop` in `begin()`/`finally end()`; `POST /api/cycle/stream` calls `begin()` in the endpoint (so rejection is a real HTTP 409/429 before SSE starts) and releases in the worker thread's `finally`, which also runs when a client disconnects mid-stream because the offline compute finishes regardless.
+- **Reasoning**: The Cycle is expensive server-side work on a public judge URL; repeated or concurrent direct API calls could starve the box. The Lab deploys a single Uvicorn process, so an in-process guard is correct; no dependency added.
+- **Rejected alternative(s)**: `slowapi`/FastAPI-Limiter — new dependency for a one-endpoint need. Release in the generator's `finally` — a client disconnect closes the generator before the worker finishes, releasing early and letting a second cycle overlap. Frontend button disabling — explicitly not server-side protection.
+- **Task/session**: Protect expensive Cycle operation on deployed Oracle VM.
 
 ### 2026-08-20 — Serialized fidelity, efficacy, and evidence artifacts (CRU-14/15/18/19)
 - **Change**: Extended `GenerationSummary` (four KS p-values incl. `None` for sub-50 samples, IST share/pass, gate count, `fidelity_pass`), `DetectionSummary` (delayed card-label count/share, `family_efficacy`), and added `FamilyEfficacySummary`, `EvidenceEventSummary`, `EvidenceSummary` to `_cycle_summary()`. `CycleRequest` bounds already permit the spec scale (`n_days` ≤ 90, `num_users` ≤ 10,000).
